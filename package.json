@@ -1,0 +1,53 @@
+{
+  "name": "napcatqq-clasic",
+  "private": true,
+  "type": "module",
+  "version": "4.18.42",
+  "description": "NapCatQQ-clasic: a frozen, independently packaged NTQQ protocol-side framework",
+  "author": "kadidalax",
+  "license": "SEE LICENSE IN LICENSE",
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=22.0.0 <25",
+    "pnpm": "9.x"
+  },
+  "scripts": {
+    "build:shell": "pnpm --filter napcat-shell run build || exit 1",
+    "build:shell:dev": "pnpm --filter napcat-shell run build:dev || exit 1",
+    "build:shell:config": "pnpm --filter napcat-shell run build && pnpm --filter napcat-develop run copy-env",
+    "build:framework": "pnpm --filter napcat-framework run build || exit 1",
+    "build:webui": "pnpm --filter napcat-webui-frontend run build || exit 1",
+    "build:plugin-builtin": "pnpm --filter napcat-plugin-builtin run build || exit 1",
+    "build:openapi": "pnpm --filter napcat-schema run build:openapi || exit 1",
+    "dev:shell": "pnpm --filter napcat-develop run dev || exit 1",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "test": "pnpm --filter napcat-test run test",
+    "test:deployment": "node --test .github/tests/deployment.test.mjs",
+    "check:project": "node scripts/check-project.mjs",
+    "build:artifacts": "node scripts/build-artifacts.mjs",
+    "package:release": "node scripts/package-release.mjs",
+    "test:ui": "pnpm --filter napcat-test run test:ui",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "pnpm": {
+    "neverBuiltDependencies": [
+      "@homebridge/node-pty-prebuilt-multiarch"
+    ]
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "@vitejs/plugin-react-swc": "^4.2.2",
+    "@vitest/ui": "^4.0.9",
+    "eslint": "^9.39.1",
+    "neostandard": "^0.12.2",
+    "typescript": "^5.3.0",
+    "vite": "^6.4.1",
+    "vite-plugin-cp": "^6.0.3",
+    "vitest": "^4.0.9"
+  },
+  "dependencies": {
+    "express": "^5.0.0",
+    "ws": "^8.18.3"
+  }
+}

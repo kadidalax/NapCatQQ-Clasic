@@ -1,0 +1,19 @@
+{
+  "_notice": "License: see repository LICENSE; maintainer kadidalax (manifest metadata only; Tencent QQ keeps its own terms)",
+  "version": "3.2.34-53644",
+  "source": "Tencent QQ official fixed-version downloads",
+  "verifiedOn": "2026-11-13",
+  "license": "LicenseRef-Tencent-QQ",
+  "architectures": {
+    "amd64": {
+      "url": "https://qqdl.gtimg.cn/qqfile/QQNT/9.9.36/beta/9ee04bef/linuxqq_3.2.34-53644_x86_64.AppImage",
+      "sha256": "a33675d355e8b559453c40b9c59823393c6e585c97a3ae9f5c151203afa125a4",
+      "size": 271368614
+    },
+    "arm64": {
+      "url": "https://qqdl.gtimg.cn/qqfile/QQNT/9.9.36/beta/9ee04bef/linuxqq_3.2.34-53644_arm64.AppImage",
+      "sha256": "dcd40e5bd44023ea43e343445ee6277637dc2ac285f96a1c3c4ebab9de5a6b5b",
+      "size": 276660745
+    }
+  }
+}

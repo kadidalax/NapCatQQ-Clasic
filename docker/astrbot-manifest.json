@@ -1,0 +1,20 @@
+{
+  "_notice": "License: see repository LICENSE for this metadata; AstrBot and its dependencies keep their independent original terms.",
+  "image": "soulter/astrbot:v4.29.4@sha256:72f341f0ffcf6621ef820277642c5d63955f7beeac3683433ce09cac96379c78",
+  "version": "4.29.4",
+  "repository": "AstrBotDevs/AstrBot",
+  "revision": "61335414433db721b3f7ecc93f90deafe0a59d78",
+  "platforms": ["linux/amd64", "linux/arm64"],
+  "architectureManifests": {
+    "amd64": "sha256:7512abc25cc931a397ddc49b2e322aa8152dc99d800f864f6fe956147c6727b0",
+    "arm64": "sha256:497908490fe26b1893d936c1631c0acaebf2ab4e88ae04304fb2b10882f507d2"
+  },
+  "defaultUser": "root",
+  "workingDirectory": "/AstrBot",
+  "command": ["python", "main.py"],
+  "pythonVersion": "3.12.16",
+  "dataPath": "/AstrBot/data",
+  "dashboardPort": 6185,
+  "onebotReversePort": 6199,
+  "onebotReversePath": "/ws"
+}

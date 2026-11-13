@@ -1,0 +1,28 @@
+# License: see repository LICENSE (NapCat Limited Redistribution License).
+# Maintainer: kadidalax.
+.git
+.github
+node_modules
+**/node_modules
+**/dist
+dist
+release-assets
+coverage
+**/coverage
+.env
+.env.*
+!.env.example
+*.log
+**/*.log
+**/*.zip
+**/*.AppImage
+**/.cache
+config
+logs
+plugins
+cache
+qq-data
+.runtime
+.tmp
+.DS_Store
+Thumbs.db

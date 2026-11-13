@@ -1,0 +1,268 @@
+# License: see repository LICENSE (NapCat Limited Redistribution License).
+# Maintainer: kadidalax.
+name: NapCatQQ-clasic Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version: v4.18.42 or 4.18.42 (inherited upstream version)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Serialize all releases so a tag push and manual invocation never race.
+concurrency:
+  group: clasic-release-${{ github.repository }}
+  cancel-in-progress: false
+
+env:
+  CI: 'true'
+  DOCKER_BUILD_RECORD_UPLOAD: 'false'
+
+jobs:
+  prepare:
+    name: Validate version and resolve the exact source commit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      tag: ${{ steps.metadata.outputs.tag }}
+      repository: ${{ steps.metadata.outputs.repository }}
+      image: ${{ steps.metadata.outputs.image }}
+      source_sha: ${{ steps.metadata.outputs.source_sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.22.0'
+      - name: Validate input as data, never shell source
+        id: metadata
+        env:
+          RELEASE_INPUT: ${{ inputs.version }}
+          NAPCAT_REPOSITORY: ${{ github.repository }}
+        run: node .github/scripts/release-metadata.mjs
+
+  build:
+    name: Typecheck, tests and release artifacts
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      NAPCAT_VERSION: ${{ needs.prepare.outputs.version }}
+      NAPCAT_REPOSITORY: ${{ needs.prepare.outputs.repository }}
+      NAPCAT_REVISION: ${{ needs.prepare.outputs.source_sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.source_sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.22.0'
+          cache: pnpm
+      - name: Install the committed lockfile
+        run: pnpm install --frozen-lockfile
+      - name: Verify identity, freeze and licensing
+        run: pnpm run check:project
+      - name: Typecheck all workspace packages
+        run: pnpm run typecheck
+      - name: Run workspace tests without watch mode
+        run: pnpm test
+      - name: Test deployment and packaging helpers
+        run: pnpm run test:deployment
+      - name: Build source Shell, Framework, WebUI, plugin and OpenAPI
+        run: pnpm run build:artifacts
+      - uses: actions/upload-artifact@v6
+        with:
+          name: NapCatQQ-clasic-release-build
+          path: dist/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
+  windows-loader:
+    name: Verify the included Windows Shell loaders
+    needs: [prepare, build]
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v7
+        with:
+          name: NapCatQQ-clasic-release-build
+          path: dist
+      - name: Build and run native loader file-query regression
+        shell: pwsh
+        run: |
+          cmake -S .github/tests/windows-loader -B "$env:RUNNER_TEMP/clasic-windows-loader" -A x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build "$env:RUNNER_TEMP/clasic-windows-loader" --config Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$env:RUNNER_TEMP/clasic-windows-loader/Release/windows-loader-test.exe" "$pwd/dist/shell/NapCatWinBootHook.dll" "$pwd/dist/shell/loadNapCat.js"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  docker:
+    name: Build, smoke and stage verified Docker (${{ matrix.arch }})
+    needs: [prepare, build]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    env:
+      LOCAL_IMAGE: napcatqq-clasic:release-${{ matrix.arch }}
+      PLATFORM: linux/${{ matrix.arch }}
+      RELEASE_IMAGE: ${{ needs.prepare.outputs.image }}:${{ needs.prepare.outputs.version }}-${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.source_sha }}
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+      - name: Build Shell from this exact source commit
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          load: true
+          push: false
+          tags: ${{ env.LOCAL_IMAGE }}
+          build-args: |
+            NAPCAT_VERSION=${{ needs.prepare.outputs.version }}
+            NAPCAT_REPOSITORY=${{ needs.prepare.outputs.repository }}
+            NAPCAT_REVISION=${{ needs.prepare.outputs.source_sha }}
+          cache-from: type=gha,scope=clasic-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=clasic-${{ matrix.arch }}
+      - name: Verify native dependencies, WebUI and persistent restart
+        run: bash .github/scripts/smoke-docker.sh
+      - name: Verify pinned AstrBot joint deployment and shared media
+        run: bash .github/scripts/smoke-astrbot.sh
+      - name: Sign in only after this image passed runtime tests
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push the exact tested image and record its content digest
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          docker tag "$LOCAL_IMAGE" "$RELEASE_IMAGE"
+          docker push "$RELEASE_IMAGE"
+          digest="$(docker image inspect "$RELEASE_IMAGE" --format '{{index .RepoDigests 0}}')"
+          export VERIFIED_DIGEST="$digest"
+          node -e 'const fs = require("node:fs"); const digest = process.env.VERIFIED_DIGEST; if (!/^ghcr\.io\/[a-z0-9-]+\/napcatqq-clasic@sha256:[a-f0-9]{64}$/.test(digest)) throw new Error("Invalid pushed image digest"); fs.mkdirSync("image-digest", {recursive:true}); fs.writeFileSync("image-digest/" + process.env.ARCH + ".json", JSON.stringify({[process.env.ARCH]:digest}, null, 2) + "\n");'
+      - uses: actions/upload-artifact@v6
+        with:
+          name: NapCatQQ-clasic-image-digest-${{ matrix.arch }}
+          path: image-digest/*.json
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish versioned GHCR manifest and GitHub Release
+    needs: [prepare, build, windows-loader, docker]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      packages: write
+    env:
+      NAPCAT_VERSION: ${{ needs.prepare.outputs.version }}
+      NAPCAT_REPOSITORY: ${{ needs.prepare.outputs.repository }}
+      SOURCE_SHA: ${{ needs.prepare.outputs.source_sha }}
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      RELEASE_IMAGE: ${{ needs.prepare.outputs.image }}:${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.22.0'
+      - uses: actions/download-artifact@v7
+        with:
+          name: NapCatQQ-clasic-release-build
+          path: dist
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: NapCatQQ-clasic-image-digest-*
+          path: dist/image-digests
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish only tested architectures under the precise version
+        id: manifest
+        run: node .github/scripts/merge-images.mjs
+      - name: Report anonymous image availability
+        id: anonymous
+        run: |
+          set -euo pipefail
+          anonymous_config="$(mktemp -d)"
+          if docker --config "$anonymous_config" pull --platform linux/amd64 "$RELEASE_IMAGE"; then
+            echo 'IMAGE_PUBLIC=true' >> "$GITHUB_ENV"
+            echo 'Anonymous GHCR pull: PASS' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'IMAGE_PUBLIC=false' >> "$GITHUB_ENV"
+            echo '::warning::Image push and runtime tests passed. For anonymous deployment, set GitHub Packages > napcatqq-clasic > Package settings > Change visibility > Public once.'
+            echo 'GHCR package is not yet anonymously accessible. The owner must set its Package visibility to Public for the public quick-start; authenticated private deployments remain available.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          rm -rf "$anonymous_config"
+      - name: Package ZIPs, repository-specific Compose, OpenAPI and checksums
+        run: node scripts/package-release.mjs
+      - name: Verify all release checksums
+        working-directory: release-assets
+        run: sha256sum --check --strict SHA256SUMS
+      - uses: actions/upload-artifact@v6
+        with:
+          name: NapCatQQ-clasic-release-assets
+          path: release-assets/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
+      - name: Create or update this repository's Release in this workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ needs.prepare.outputs.repository }}
+          MANIFEST_DIGEST: ${{ steps.manifest.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-assets/* --clobber
+            gh release edit "$RELEASE_TAG" --title "NapCatQQ-clasic $RELEASE_TAG" --notes-file release-assets/RELEASE.md
+          else
+            gh release create "$RELEASE_TAG" release-assets/* \
+              --target "$SOURCE_SHA" --title "NapCatQQ-clasic $RELEASE_TAG" --notes-file release-assets/RELEASE.md
+          fi
+          printf '## NapCatQQ-clasic %s\n\nImage: `%s@%s`\n\nRelease: https://github.com/%s/releases/tag/%s\n' \
+            "$RELEASE_TAG" "$RELEASE_IMAGE" "$MANIFEST_DIGEST" "$NAPCAT_REPOSITORY" "$RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"

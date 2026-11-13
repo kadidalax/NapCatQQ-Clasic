@@ -1,0 +1,36 @@
+# Develop
+node_modules/
+out/
+dist/
+/src/core.lib/common/
+devconfig/*
+
+# Editor
+!.vscode/extensions.json
+.idea/*
+
+# macOS
+.DS_Store
+
+# Build
+*.db
+checkVersion.sh
+bun.lockb
+tests/run/
+guild1.db-wal
+guild1.db-shm
+packages/napcat-develop/config/.env
+.claude
+
+# Local deployment state and secrets (commit .env.example, never .env)
+.env
+.env.*
+!.env.example
+/config/
+/logs/
+/qq-data/
+/backups/
+/release-assets/
+*.log
+*.tar.gz
+*.zip

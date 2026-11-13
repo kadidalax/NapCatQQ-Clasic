@@ -1,0 +1,39 @@
+# License: see repository LICENSE (NapCat Limited Redistribution License).
+# Maintainer: kadidalax.
+name: NapCatQQ-clasic 改进建议
+description: 记录停更存档建议，不承诺处理或新版本
+title: '[FEAT] '
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        NapCatQQ-clasic 是停止维护、停止追踪上游的存档快照。
+        此入口仅用于记录存档建议，不承诺处理建议或发布新版本。
+        请说明建议涉及的具体情况；提交前搜索本仓库已有记录。
+  - type: input
+    id: version
+    attributes:
+      label: 当前 NapCatQQ-clasic 版本
+      placeholder: '1.0.0'
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: 当前遇到的具体问题
+      description: 描述使用场景、环境与现有流程的不足。
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: 建议的变化与验收方式
+      description: 说明预期操作、结果与可验证的验收步骤。
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: 补充证据
+      description: 可附命令输出、截图或相关代码位置；请移除账号凭证。

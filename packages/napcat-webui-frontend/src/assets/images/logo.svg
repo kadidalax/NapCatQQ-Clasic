@@ -1,0 +1,10 @@
+<!-- Licensing: see repository LICENSE; Copyright (c) 2026 kadidalax -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">NapCatQQ-clasic</title>
+  <desc id="desc">NC clasic monogram for the frozen NapCatQQ-clasic snapshot maintained by kadidalax</desc>
+  <rect width="512" height="512" rx="104" fill="#111827"/>
+  <path d="M92 154h328M92 358h328" stroke="#10b981" stroke-width="14" stroke-linecap="round"/>
+  <path d="M100 115l36-20 36 20v40l-36 20-36-20z" fill="#10b981"/>
+  <text x="256" y="302" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="172" font-weight="700" fill="#f9fafb">NC</text>
+  <text x="256" y="415" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="42" font-weight="600" letter-spacing="9" fill="#6ee7b7">CLASIC</text>
+</svg>

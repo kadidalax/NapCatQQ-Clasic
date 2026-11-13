@@ -1,0 +1,19 @@
+{
+  "name": "napcat-plugin-builtin",
+  "plugin": "内置插件",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.mjs",
+  "description": "NapCatQQ-clasic 内置插件（冻结版）",
+  "maintainers": ["kadidalax"],
+  "author": "NapNeko",
+  "dependencies": {
+    "napcat-types": "0.0.16"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.1"
+  },
+  "scripts": {
+    "build": "vite build"
+  }
+}

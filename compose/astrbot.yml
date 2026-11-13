@@ -1,0 +1,105 @@
+# License: see repository LICENSE (NapCat Limited Redistribution License).
+# Maintainer: kadidalax. AstrBot retains its independent original license.
+# Standalone joint deployment: no extends, include, or second Compose file.
+name: napcatqq-clasic
+services:
+  napcat:
+    image: "${NAPCAT_IMAGE:?Set NAPCAT_IMAGE in .env to your pinned GHCR image}"
+    restart: unless-stopped
+    hostname: napcatqq-clasic
+    user: "1000:1000"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    shm_size: 256m
+    environment:
+      WEBUI_TOKEN: "${WEBUI_TOKEN:-}"
+      NAPCAT_QUICK_ACCOUNT: "${QQ_ACCOUNT:-}"
+      # '-' preserves a deliberate empty MODE; unset MODE defaults to astrbot.
+      MODE: "${MODE-astrbot}"
+      ONEBOT_WS_URL: "${ONEBOT_WS_URL:-ws://astrbot:6199/ws}"
+      ONEBOT_ACCESS_TOKEN: "${ONEBOT_ACCESS_TOKEN:-}"
+    ports:
+      - "${WEBUI_BIND:-127.0.0.1}:${WEBUI_PORT:-6099}:6099"
+    volumes:
+      - napcat_config:/app/napcat/config
+      - napcat_logs:/app/napcat/logs
+      - napcat_plugins:/app/napcat/plugins
+      - napcat_cache:/app/napcat/cache
+      - napcat_qq:/home/napcat/.config/QQ
+      # Same absolute media path; no recursive chmod/chown of AstrBot data.
+      - astrbot_data:/AstrBot/data:ro
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=256m,mode=1777
+      - /home/napcat/.cache:rw,nosuid,nodev,size=128m,uid=1000,gid=1000,mode=0700
+      - /home/napcat/.local/share:rw,nosuid,nodev,size=32m,uid=1000,gid=1000,mode=0700
+    depends_on:
+      astrbot:
+        condition: service_healthy
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  astrbot:
+    image: "${ASTRBOT_IMAGE:-soulter/astrbot:v4.29.4@sha256:72f341f0ffcf6621ef820277642c5d63955f7beeac3683433ce09cac96379c78}"
+    restart: unless-stopped
+    working_dir: /AstrBot
+    # Keep the verified image's root user and writable application filesystem;
+    # plugin installation uses system Python. Do not force UID 1000 here.
+    environment:
+      DASHBOARD_HOST: "0.0.0.0"
+      DASHBOARD_PORT: "6185"
+      ASTRBOT_DASHBOARD_INITIAL_PASSWORD: "${ASTRBOT_DASHBOARD_INITIAL_PASSWORD:-}"
+    # The stock application rejects an explicitly empty initial-password env.
+    # Drop only the empty value, then replace this wrapper with stock main.py.
+    command:
+      - python
+      - -c
+      - |
+        import os
+        if os.environ.get("ASTRBOT_DASHBOARD_INITIAL_PASSWORD") == "":
+            os.environ.pop("ASTRBOT_DASHBOARD_INITIAL_PASSWORD", None)
+        os.execvp("python", ["python", "main.py"])
+    ports:
+      - "${ASTRBOT_DASHBOARD_BIND:-127.0.0.1}:${ASTRBOT_DASHBOARD_PORT:-6185}:6185"
+    expose:
+      - "6199"
+    volumes:
+      - astrbot_data:/AstrBot/data
+    healthcheck:
+      # Existing users may disable the dashboard while keeping OneBot enabled.
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import socket, sys
+          for port in (6185, 6199):
+              try:
+                  connection = socket.create_connection(("127.0.0.1", port), 2)
+                  connection.close()
+                  sys.exit(0)
+              except OSError:
+                  pass
+          sys.exit(1)
+      interval: 15s
+      timeout: 5s
+      start_period: 90s
+      retries: 10
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  napcat_config:
+  napcat_logs:
+  napcat_plugins:
+  napcat_cache:
+  napcat_qq:
+  astrbot_data:
