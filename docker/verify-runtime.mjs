@@ -3,6 +3,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
+import { verifyServerModules } from './verify-server-modules.mjs';
 
 const qq = '/opt/QQ';
 const shell = '/app/shell';
@@ -28,4 +29,6 @@ if (json5.version !== '2.2.3') throw new Error('Locked runtime JSON5 parser is m
 for (const file of ['node_modules/json5/LICENSE.md', 'napcat.mjs', 'loadNapCat.js', 'static/index.html', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'packages/napcat-webui-frontend/LICENSE', 'packages/napcat-dpapi/LICENSE', 'licenses/qrcode-terminal.LICENSE', 'licenses/qrcode-generator.LICENSE', 'licenses/node-pty.LICENSE']) {
   if (!existsSync(path.join(shell, file))) throw new Error(`Missing packaged runtime file: ${file}`);
 }
+const modules = verifyServerModules(shell);
+console.log(`Server module graph PASS: ${modules.length} ESM/CJS files; CommonJS loaders preserved`);
 console.log(`NapCatQQ-clasic ${project.version}, QQ ${manifest.version} ${architecture}: runtime layout and native dependencies PASS`);

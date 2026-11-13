@@ -238,7 +238,7 @@ jobs:
             echo 'GHCR package is not yet anonymously accessible. The owner must set its Package visibility to Public for the public quick-start; authenticated private deployments remain available.' >> "$GITHUB_STEP_SUMMARY"
           fi
           rm -rf "$anonymous_config"
-      - name: Package ZIPs, repository-specific Compose, OpenAPI and checksums
+      - name: Package runtime ZIPs, OpenAPI, licenses and checksums
         run: node scripts/package-release.mjs
       - name: Verify all release checksums
         working-directory: release-assets
@@ -259,6 +259,16 @@ jobs:
           set -euo pipefail
           if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" release-assets/* --clobber
+            # --clobber replaces uploaded names, but never removes obsolete assets.
+            # Delete only known deployment templates; keep all unrelated assets.
+            asset_names="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
+            while IFS= read -r asset; do
+              case "$asset" in
+                compose.yaml|astrbot.yml|env.example|.env.example)
+                  gh release delete-asset "$RELEASE_TAG" "$asset" --yes
+                  ;;
+              esac
+            done <<< "$asset_names"
             gh release edit "$RELEASE_TAG" --title "NapCatQQ-clasic $RELEASE_TAG" --notes-file release-assets/RELEASE.md
           else
             gh release create "$RELEASE_TAG" release-assets/* \

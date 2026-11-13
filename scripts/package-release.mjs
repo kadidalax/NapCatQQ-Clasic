@@ -6,6 +6,7 @@ import { deflateRawSync } from 'node:zlib';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { assertGeneratedDirectory, getProject, LICENSE_FILES, normalizeRepository, normalizeVersion, parseArguments, ROOT } from './build-artifacts.mjs';
+import { verifyServerModules } from '../docker/verify-server-modules.mjs';
 
 export const ASTRBOT_MANIFEST = JSON.parse(readFileSync(new URL('../docker/astrbot-manifest.json', import.meta.url), 'utf8'));
 
@@ -153,7 +154,7 @@ export function releaseNotes (project, version, repository, image) {
       'docker compose -f astrbot.yml logs --tail=100 astrbot',
     ].flatMap(command => ['```sh', command, '```', '']),
     'AstrBot 面板默认 http://127.0.0.1:6185，首次用户名 astrbot；空初始密码变量被移除，由程序生成随机 24 字符密码并在日志 Initial password 显示。设置显式初始密码时需满足其原生强度校验。',
-    '第一次必须在 AstrBot WebUI 手动添加 aiocqhttp / OneBot v11 平台：enable=true、ws_reverse_host=0.0.0.0、ws_reverse_port=6199、ws_reverse_token=双方相同协议 token。AstrBot 原始 platform=[]，启动容器不代表已连通 QQ。',
+    '第一次必须在 AstrBot WebUI 手动添加 aiocqhttp / OneBot v11 平台：enable=true、ws_reverse_host=0.0.0.0、ws_reverse_port=6199，ws_reverse_token 与 Classic astrbot 连接实际生效的 token 一致。非空 ONEBOT_ACCESS_TOKEN 覆盖该 token；空值迁移时应沿用已有连接 token。AstrBot 原始 platform=[]，启动容器不代表已连通 QQ。',
     'Classic 的 MODE=astrbot 预设为单一 astrbot 反向客户端，默认 ws://astrbot:6199/ws 与 array 消息格式；现有全局和账号配置只修改该条目、首次备份、重复启动幂等。唯一旧 rws 同 URL 条目会被接管；重复目标或命名冲突会先报错，避免双重消息。',
     'ONEBOT_ACCESS_TOKEN 非空覆盖该条目；空或未设置保留已有 token，新条目才为空。它与 WEBUI_TOKEN 独立，不自动生成。MODE 显式空值不改 OneBot 配置。',
     '两服务共同挂载 /AstrBot/data，Classic 只读。普通已发布媒体需目录可遍历、UID 1000 可读；root 创建的 mkstemp 0600 文件仍不可读，不会全树 chmod。需要 HTTP 交付时可在 AstrBot 配置 callback_api_base=http://astrbot:6185，并注意下载方可达性、短期/单次 token 与重试限制。',
@@ -202,6 +203,7 @@ export function packageRelease (args = process.argv.slice(2)) {
     const manifest = JSON.parse(readFileSync(path.join(dist, target, 'package.json'), 'utf8'));
     if (manifest.version !== version || manifest.name !== `${project.slug}-${target}`) throw new Error(`${target} artifact version/name mismatch`);
     for (const name of LICENSE_FILES) if (!existsSync(path.join(dist, target, name))) throw new Error(`${target} is missing ${name}`);
+    verifyServerModules(path.join(dist, target));
   }
   const buildInfo = JSON.parse(readFileSync(path.join(dist, 'build-info.json'), 'utf8'));
   if (buildInfo.version !== version || buildInfo.frozen !== true || !['shell', 'framework'].every(target => buildInfo.targets.includes(target))) throw new Error('Build metadata does not describe this complete release');

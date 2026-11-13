@@ -4,6 +4,7 @@ import { cpSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, r
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { verifyServerModules } from '../docker/verify-server-modules.mjs';
 
 export const ROOT = path.resolve(fileURLToPath(new URL('../', import.meta.url)));
 export const RUNTIME_DEPENDENCIES = [
@@ -202,6 +203,8 @@ export function assembleArtifact (target, project, version, destination) {
   requireFile(path.join(ROOT, 'logo.svg'));
   copyFileSync(path.join(ROOT, 'logo.svg'), path.join(destination, 'logo.svg'));
   writeFileSync(path.join(destination, 'project.json'), JSON.stringify({ ...project, version }, null, 2) + '\n');
+  const modules = verifyServerModules(destination);
+  console.log(`${target} server module graph PASS: ${modules.length} ESM/CJS files`);
   return destination;
 }
 

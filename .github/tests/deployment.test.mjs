@@ -9,6 +9,8 @@ import { inflateRawSync } from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { verifyServerModules } from '../../docker/verify-server-modules.mjs';
 import { assertGeneratedDirectory, buildArtifacts, copyLicenses, copyRuntimeDependencies, getProject, LICENSE_FILES, normalizeRepository, normalizeVersion, parseArguments, ROOT } from '../../scripts/build-artifacts.mjs';
 import { crc32, createZip, packageRelease, releaseNotes, renderCompose, renderAstrbotCompose, renderEnvironment, ASTRBOT_MANIFEST } from '../../scripts/package-release.mjs';
 import { validateReleaseInput } from '../scripts/release-metadata.mjs';
@@ -286,8 +288,9 @@ test('release packaging creates complete visible assets and checksums with a con
   const output = path.join(ROOT, 'release-assets', token);
   cleanup.push(dist, output);
   for (const target of ['shell', 'framework']) {
-    json(path.join(dist, target, 'package.json'), { name: `napcatqq-clasic-${target}`, version: '1.0.0' });
+    json(path.join(dist, target, 'package.json'), { name: `napcatqq-clasic-${target}`, version: '1.0.0', type: 'commonjs' });
     write(path.join(dist, target, 'napcat.mjs'), 'export const fixture = true;');
+    write(path.join(dist, target, 'worker/conoutSocketWorker.mjs'), 'export const fixture = true;');
     for (const file of LICENSE_FILES) copyFileSync(path.join(ROOT, file), path.join(dist, target, file));
   }
   json(path.join(dist, 'build-info.json'), { name: 'NapCatQQ-clasic', version: '1.0.0', frozen: true, targets: ['shell', 'framework'], repository: 'kadidalax/NapCatQQ-Clasic' });
@@ -577,6 +580,65 @@ test('server library chunks retain ESM extensions in commonjs loader distributio
     const config = readFileSync(path.join(ROOT, 'packages', `napcat-${target}`, 'vite.config.ts'), 'utf8');
     assert.match(config, /chunkFileNames:\s*['"]\[name\]-\[hash\]\.mjs['"]/);
   }
+});
+test('actual Vite shared chunks import correctly inside the packaged CommonJS scope', async () => {
+  const { build } = await import('vite');
+  const root = fixture();
+  // Vite's default shared-chunk suffix follows the SOURCE package type.
+  json(path.join(root, 'package.json'), { type: 'module' });
+  write(path.join(root, 'shared.js'), 'export const C = 20; export function g() { return 22; }');
+  write(path.join(root, 'main.js'), 'import { C, g } from "./shared.js"; export const value = C + g();');
+  write(path.join(root, 'worker.js'), 'import { C, g } from "./shared.js"; export const value = C + g();');
+  const outputPatterns = new Set();
+  for (const target of ['shell', 'framework']) {
+    const configuration = readFileSync(path.join(ROOT, 'packages', `napcat-${target}`, 'vite.config.ts'), 'utf8');
+    outputPatterns.add(configuration.match(/chunkFileNames:\s*['"]([^'"]+)['"]/)?.[1]);
+  }
+  assert.deepEqual([...outputPatterns], ['[name]-[hash].mjs']);
+  async function bundle (directory, fixed) {
+    await build({
+      configFile: false, root, logLevel: 'silent',
+      build: {
+        outDir: directory, emptyOutDir: true, minify: false, target: 'esnext',
+        lib: { entry: { napcat: path.join(root, 'main.js'), 'worker/conoutSocketWorker': path.join(root, 'worker.js') }, formats: ['es'], fileName: (_, name) => `${name}.mjs` },
+        rollupOptions: fixed ? { output: { chunkFileNames: [...outputPatterns][0] } } : {},
+      },
+    });
+    json(path.join(directory, 'package.json'), { type: 'commonjs' });
+  }
+  const good = path.join(root, 'good');
+  await bundle(good, true);
+  const modules = verifyServerModules(good);
+  const shared = modules.find(file => /^shared-.*\.mjs$/.test(file));
+  assert.ok(shared, 'Two actual entry points must emit a shared chunk');
+  write(path.join(good, 'loadNapCat.js'), 'module.exports = {};');
+  write(path.join(good, 'static/browser.js'), 'export const browser = true;');
+  write(path.join(good, 'node_modules/example/index.js'), 'module.exports = {};');
+  assert.deepEqual(verifyServerModules(good), modules);
+  const probe = 'const modules = await Promise.all(process.argv.slice(1).map(url => import(url))); console.log(JSON.stringify(modules.map(module => module.value)));';
+  const urls = ['napcat.mjs', 'worker/conoutSocketWorker.mjs'].map(file => pathToFileURL(path.join(good, file)).href);
+  const imported = spawnSync(process.execPath, ['--input-type=module', '-e', probe, ...urls], { encoding: 'utf8' });
+  assert.equal(imported.status, 0, imported.stderr);
+  assert.deepEqual(JSON.parse(imported.stdout), [42, 42]);
+  rmSync(path.join(good, shared));
+  assert.throws(() => verifyServerModules(good), /Missing server import target/);
+  const broken = path.join(root, 'broken');
+  await bundle(broken, false);
+  assert.throws(() => verifyServerModules(broken), /Generated server JavaScript must use \.mjs/);
+});
+test('server module validation catches missing workers and malformed emitted syntax', () => {
+  const root = fixture();
+  json(path.join(root, 'package.json'), { type: 'commonjs' });
+  write(path.join(root, 'napcat.mjs'), 'export const value = 42;');
+  assert.throws(() => verifyServerModules(root), /Missing server module: worker/);
+  write(path.join(root, 'worker/conoutSocketWorker.mjs'), 'export const value = ;');
+  assert.throws(() => verifyServerModules(root), /Server module syntax validation failed/);
+});
+test('release updates prune only obsolete deployment template attachments', () => {
+  const workflow = readFileSync(path.join(ROOT, '.github/workflows/release.yml'), 'utf8');
+  assert.match(workflow, /gh release delete-asset "\$RELEASE_TAG" "\$asset" --yes/);
+  assert.match(workflow, /compose\.yaml\|astrbot\.yml\|env\.example\|\.env\.example/);
+  assert.ok(workflow.indexOf('gh release upload') < workflow.indexOf('gh release delete-asset'), 'Upload replacements before pruning old template assets');
 });
 test('the exact joint Compose Python wrapper removes only an empty initial password before stock execution', t => {
   const joint = composeConfiguration('astrbot.yml');

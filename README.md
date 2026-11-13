@@ -1,10 +1,7 @@
 <!-- License: see repository LICENSE and original component licenses. -->
 # NapCatQQ-clasic
 
-
 本分支保留 Shell、Framework、WebUI 与 OneBot 11 接口，提供独立 Docker 镜像以及 AstrBot 联部署配置。核心版本检查、下载更新、启动时覆盖更新和上游同步固定关闭；不承诺未来 QQ 版本兼容。
-
-
 
 ## 1. 架构与支持范围
 
@@ -20,7 +17,7 @@ NapCatQQ-clasic ── OneBot 11 reverse WebSocket ──► AstrBot
 
 | 项目 | 固定基线 / 契约 |
 | --- | --- |
-| Classic 快照版本 | 沿用上游最后版本 `4.18.42`，不另开版本系列或生成 CI 后缀 |
+| Classic 固定版本 | `4.18.42`；沿用已确认版本号，不另开版本系列或生成 CI 后缀 |
 | 构建环境 | Node.js `22.22.0`、pnpm `9.15.9`、仓库锁文件 |
 | Classic 容器 | Debian bookworm、固定 Node 多架构镜像摘要、普通用户 `1000:1000` |
 | QQ 运行环境 | Linux QQ `3.2.34-53644`，使用 QQ 自身 Electron / 原生 ABI |
@@ -90,7 +87,7 @@ docker compose -f astrbot.yml config -q && docker compose -f astrbot.yml up -d
 ### 2.3 首次建立协议连接
 
 1. 打开 Classic 的 `/webui/`，用实际 token 登录并完成 QQ 登录。
-2. 打开 AstrBot WebUI，创建并启用 **OneBot v11 / aiocqhttp** 平台：接收监听 `0.0.0.0:6199`，WebSocket 路径 `/ws`，token 与 `ONEBOT_ACCESS_TOKEN` 相同。
+2. 打开 AstrBot WebUI，创建并启用 **OneBot v11 / aiocqhttp** 平台：接收监听 `0.0.0.0:6199`，WebSocket 路径 `/ws`，token 与 Classic 中 `astrbot` 连接**实际生效的 token** 相同。显式设置非空 `ONEBOT_ACCESS_TOKEN` 时才由该环境值覆盖；迁移旧配置且环境值为空时，Classic 保留原连接 token，AstrBot 也应沿用它。
 3. 核对 Classic 中的反向 WebSocket 已启用，目标为 `ws://astrbot:6199/ws`，消息格式为 `array`；日志应显示协议连接成功。
 4. 用实际账号分别验收文本、图片、文件和视频。端口 `6199` 只用于容器内部网络，不要求映射到宿主。
 
@@ -136,7 +133,14 @@ docker compose -f astrbot.yml exec napcat node -p "require('/app/napcat/config/w
 ssh -N -L 6099:127.0.0.1:6099 -L 6185:127.0.0.1:6185 USER@HOST
 ```
 
-OneBot 或其他协议端口仅按实际需要添加。宿主服务经 `host.docker.internal:host-gateway` 访问；容器内的 `127.0.0.1` 不是宿主机。
+OneBot 或其他协议端口仅按实际需要添加。容器内的 `127.0.0.1` 不是宿主机。Linux 下需访问宿主服务时，在相应服务配置中显式添加以下映射；两个默认模板不预置该项。
+
+```yaml
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+```
+
+随后使用 `host.docker.internal` 访问宿主上实际开放的服务端口。
 
 ## 4. 持久化与媒体路径
 
@@ -190,7 +194,7 @@ docker compose -f astrbot.yml logs --tail=200 napcat astrbot
 备份在停机后执行，避免复制正在写入的 QQ / 插件数据库。Classic 与 AstrBot 分别归档；两者都停机后再读取数据。部署环境文件单独保存。
 
 ```bash
-mkdir -p backups && docker compose -f astrbot.yml stop
+mkdir -p backups && chmod 700 backups && docker compose -f astrbot.yml stop
 ```
 
 ```bash
@@ -202,7 +206,13 @@ docker compose -f astrbot.yml run --rm -T --no-deps --entrypoint tar astrbot -cz
 ```
 
 ```bash
-cp .env backups/deployment.env && chmod 600 backups/classic.tar.gz backups/astrbot.tar.gz backups/deployment.env
+chmod 600 backups/classic.tar.gz backups/astrbot.tar.gz
+```
+
+只有使用 `.env` 时才额外备份部署环境；未创建该文件不影响数据归档和权限设置。
+
+```bash
+if [ -f .env ]; then cp .env backups/deployment.env && chmod 600 backups/deployment.env; fi
 ```
 
 ```bash
@@ -244,6 +254,8 @@ pnpm run package:release --version 4.18.42 --repository kadidalax/NapCatQQ-Clasi
 ```
 
 构建目录为 `dist/`，发行资产为 `release-assets/`。版本与仓库身份离线解析，命令不创建远程 Release 或推送镜像。仓库内 PTY 使用随附原生资源；[包配置](<./package.json>) 跳过冗余 `@homebridge/node-pty-prebuilt-multiarch` 安装编译，保留其 JS / 类型，并正常执行必要构建脚本。
+
+Shell / Framework 运行包保留 CommonJS 加载器作用域；服务端入口、worker 与共享分块统一使用 `.mjs`，不依赖源码根清单中的 ESM 设置。构建组装、Release 打包与 Docker 运行布局检查均调用同一 [模块校验器](<./docker/verify-server-modules.mjs>)，检查入口、模块语法和静态导入目标。浏览器资源、插件和运行依赖保留各自模块语义；此检查只解析产物，不初始化 QQ 或执行账号登录。
 
 ```bash
 docker build --build-arg NAPCAT_VERSION=4.18.42 --build-arg NAPCAT_REPOSITORY=kadidalax/NapCatQQ-Clasic -t napcatqq-clasic:4.18.42 .
