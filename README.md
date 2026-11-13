@@ -35,50 +35,54 @@ QQ 实际登录及消息功能仍受该固定客户端与当前服务端兼容�
 
 ## 2. 部署
 
-要求 Docker Engine 与 Compose v2。下述示例针对**已经成功发布**的 Release 和镜像；本地存在构建配置不代表 GHCR 镜像已发布。固定版本可按部署策略替换，不使用自动升级容器。
+要求 Docker Engine 与 Compose v2。部署文件直接从项目根目录下载，镜像需已经成功发布；本地存在构建配置不代表 GHCR 镜像已发布。模板内置默认值，不要求 `.env` 文件。需要可重现配置时，可将下载链接中的 `main` 替换为已验收的提交号或标签。
 
 ### 2.1 单实例 Classic
 
-[源 Compose](<./compose.yaml>) 管理 Classic 及其持久化卷。发行版配置会填入实际 GHCR owner 和版本。
+[compose.yaml](<./compose.yaml>) 位于项目根目录，管理 Classic 及其持久化卷。模板内置 `4.18.42` 镜像与端口默认值，不作为 Release 附件。
 
 ```bash
 mkdir -p napcatqq-clasic && cd napcatqq-clasic
 ```
 
 ```bash
-wget -O compose.yaml https://github.com/kadidalax/NapCatQQ-Clasic/releases/download/v4.18.42/compose.yaml
+wget -O compose.yaml https://raw.githubusercontent.com/kadidalax/NapCatQQ-Clasic/main/compose.yaml
 ```
 
+可选：需要集中覆盖默认值时再保存环境样例；直接使用默认配置可跳过。
+
 ```bash
-wget -O .env https://github.com/kadidalax/NapCatQQ-Clasic/releases/download/v4.18.42/env.example
+wget -O .env https://raw.githubusercontent.com/kadidalax/NapCatQQ-Clasic/main/.env.example
 ```
 
 按 [环境变量契约](<./.env.example>) 设置镜像、管理 token 与宿主绑定，然后验证并启动：
 
 ```bash
-chmod 600 .env && docker compose config -q && docker compose up -d
+docker compose config -q && docker compose up -d
 ```
 
 ### 2.2 AstrBot + Classic
 
-[联部署模板](<./compose/astrbot.yml>) 是独立 Compose 文件，不依赖源码目录或其他 Compose 文件。发行资产名为 `astrbot.yml`；它使用与单实例相同的项目名与 Classic 卷名，便于在相同部署目录保留已有 Classic 数据。
+[astrbot.yml](<./astrbot.yml>) 位于项目根目录，是独立 Compose 文件，不依赖其他 Compose 文件或 `.env` 文件，也不放入 Release。它与单实例使用相同项目名和 Classic 卷名，便于在相同部署目录保留已有数据。
 
 ```bash
 mkdir -p napcatqq-clasic && cd napcatqq-clasic
 ```
 
 ```bash
-wget -O astrbot.yml https://github.com/kadidalax/NapCatQQ-Clasic/releases/download/v4.18.42/astrbot.yml
+wget -O astrbot.yml https://raw.githubusercontent.com/kadidalax/NapCatQQ-Clasic/main/astrbot.yml
 ```
 
+可选：需要集中覆盖默认值时再保存环境样例；直接使用默认配置可跳过。
+
 ```bash
-wget -O .env https://github.com/kadidalax/NapCatQQ-Clasic/releases/download/v4.18.42/env.example
+wget -O .env https://raw.githubusercontent.com/kadidalax/NapCatQQ-Clasic/main/.env.example
 ```
 
 设置 `ONEBOT_ACCESS_TOKEN`，保持 `ONEBOT_WS_URL` 与 AstrBot 的接收端一致；保留或按策略覆盖固定 `ASTRBOT_IMAGE`。
 
 ```bash
-chmod 600 .env && docker compose -f astrbot.yml config -q && docker compose -f astrbot.yml up -d
+docker compose -f astrbot.yml config -q && docker compose -f astrbot.yml up -d
 ```
 
 联部署启用 `MODE=astrbot`，初始化 OneBot 反向连接预设；单独运行 Classic 不启用该预设。旧模板的 `NAPCAT_UID` / `NAPCAT_GID` 不是本分支的运行用户接口，Classic 固定使用 UID / GID 1000。
@@ -94,9 +98,12 @@ AstrBot `v4.29.4` 初始平台列表为空，容器启动不会自动创建接�
 
 ## 3. 配置管理
 
+`.env` 文件不是依赖或必需文件。模板已经设置默认镜像、监听端口、账号和联部署参数；Compose 可以直接使用默认值，或由终端环境变量覆盖。只有希望集中管理覆盖项时才使用根目录 [`.env.example`](<./.env.example>) 生成 `.env`。Classic 管理 token 未指定时会随机生成并持久化；OneBot 协议 token 不自动生成，应与 AstrBot 端一致。
+
+
 | 变量 | 作用 / 默认 |
 | --- | --- |
-| `NAPCAT_IMAGE` | 本仓库 Classic 镜像的精确版本；发行时自动具体化 |
+| `NAPCAT_IMAGE` | 可选覆盖；默认 `ghcr.io/kadidalax/napcatqq-clasic:4.18.42` |
 | `ASTRBOT_IMAGE` | 联部署使用的固定 AstrBot 镜像，可显式覆盖 |
 | `WEBUI_TOKEN` | Classic 管理 token；空值时首次随机生成，已有配置继续沿用 |
 | `WEBUI_BIND` / `WEBUI_PORT` | Classic 宿主绑定 / 端口；容器内固定为 `0.0.0.0:6099` |
@@ -243,7 +250,7 @@ docker build --build-arg NAPCAT_VERSION=4.18.42 --build-arg NAPCAT_REPOSITORY=ka
 ```
 
 ```bash
-NAPCAT_IMAGE=napcatqq-clasic:4.18.42 docker compose -f compose/astrbot.yml --env-file .env.example up -d
+NAPCAT_IMAGE=napcatqq-clasic:4.18.42 docker compose -f astrbot.yml up -d
 ```
 
 联部署本地运行同样应显式规划 `ONEBOT_ACCESS_TOKEN`；协议 token 不自动生成，空值对已有条目表示保留现值，对新条目表示不启用 token 验证。开发 WebUI 的代理和构建说明见 [前端文档](<./packages/napcat-webui-frontend/README.md>)。
@@ -264,13 +271,10 @@ NAPCAT_IMAGE=napcatqq-clasic:4.18.42 docker compose -f compose/astrbot.yml --env
 | `NapCatQQ-clasic.Shell.zip` | Shell、WebUI、插件、原生资源和锁定运行依赖；裸机需已有兼容 QQ |
 | `NapCatQQ-clasic.Framework.zip` | Framework 分发包及对应运行资源 |
 | `openapi.json` | 本次源码生成的接口描述 |
-| `compose.yaml` | 单实例部署，已具体化 Classic 镜像版本 |
-| `astrbot.yml` | 独立 AstrBot 联部署配置 |
-| `env.example` | 当前发行的环境契约，部署时保存为 `.env` |
 | `SHA256SUMS` | 实际发行资产校验和 |
 | `build-info.json` / `image-manifest.json` | 构建身份、版本和镜像摘要 |
 
-GitHub 会规范化发行资产前导点号，因此使用可见的 `env.example`，源文件仍为 [`.env.example`](<./.env.example>)。
+[compose.yaml](<./compose.yaml>)、[astrbot.yml](<./astrbot.yml>) 和可选 [`.env.example`](<./.env.example>) 只在项目根目录维护，不作为 Release 附件发布；Release 保留运行包、接口描述、许可与校验和。
 
 ## 7. 验收边界
 

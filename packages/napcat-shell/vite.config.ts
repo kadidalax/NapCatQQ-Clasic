@@ -64,6 +64,7 @@ const ShellBaseConfig = (source_map: boolean = false) =>
         fileName: (_, entryName) => `${entryName}.mjs`,
       },
       rollupOptions: {
+        output: { chunkFileNames: '[name]-[hash].mjs' },
         external: [...nodeModules, ...external],
       },
     },

@@ -181,10 +181,11 @@ test('Compose release assets concrete the owner/version but keep image override 
 test('release deployment commands are one command per block and use the real asset name', () => {
   const notes = releaseNotes({ name: 'NapCatQQ-clasic', maintainer: 'kadidalax' }, '1.0.0', 'kadidalax/NapCatQQ-Clasic', 'ghcr.io/kadidalax/napcatqq-clasic:1.0.0');
   const blocks = [...notes.matchAll(/```sh\n([\s\S]*?)\n```/g)].map(match => match[1]);
-  assert.ok(blocks.length >= 14);
+  assert.ok(blocks.length >= 12);
   for (const command of blocks) assert.equal(command.split('\n').length, 1);
-  assert.ok(notes.includes('/env.example'));
-  assert.ok(!notes.includes('/.env.example'));
+  assert.ok(notes.includes('raw.githubusercontent.com/kadidalax/NapCatQQ-Clasic/main/compose.yaml'));
+  assert.ok(!notes.includes('/releases/download/v1.0.0/compose.yaml'));
+  assert.ok(!notes.includes('/releases/download/v1.0.0/astrbot.yml'));
   assert.ok(notes.includes('docker compose config -q'));
   assert.ok(notes.includes('http://127.0.0.1:6099/webui/'));
 });
@@ -295,18 +296,15 @@ test('release packaging creates complete visible assets and checksums with a con
   assert.equal(result.image, 'ghcr.io/kadidalax/napcatqq-clasic:1.0.0');
   assert.ok(existsSync(path.join(output, 'NapCatQQ-clasic.Shell.zip')));
   assert.ok(existsSync(path.join(output, 'NapCatQQ-clasic.Framework.zip')));
-  assert.ok(existsSync(path.join(output, 'env.example')));
-  assert.ok(existsSync(path.join(output, 'astrbot.yml')));
-  assert.match(readFileSync(path.join(output, 'astrbot.yml'), 'utf8'), /NAPCAT_IMAGE:-ghcr\.io\/kadidalax\/napcatqq-clasic:1\.0\.0/);
-  assert.match(readFileSync(path.join(output, 'env.example'), 'utf8'), new RegExp('^ASTRBOT_IMAGE=' + ASTRBOT_MANIFEST.image.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'm'));
+  for (const file of ['compose.yaml', 'astrbot.yml', 'env.example', '.env.example']) {
+    assert.ok(!existsSync(path.join(output, file)), `Deployment configuration must stay in repository root: ${file}`);
+  }
   assert.equal(JSON.parse(readFileSync(path.join(output, 'image-manifest.json'), 'utf8')).astrbot.image, ASTRBOT_MANIFEST.image);
   assert.ok(!existsSync(path.join(output, '.env.example')), 'Leading-dot duplicate asset names are not published');
   for (const line of readFileSync(path.join(output, 'SHA256SUMS'), 'utf8').trim().split('\n')) {
     const [hash, name] = line.split('  ');
     assert.equal(hash, createHash('sha256').update(readFileSync(path.join(output, name))).digest('hex'), name);
   }
-  assert.match(readFileSync(path.join(output, 'compose.yaml'), 'utf8'), /NAPCAT_IMAGE:-ghcr\.io\/kadidalax\/napcatqq-clasic:1\.0\.0/);
-  assert.match(readFileSync(path.join(output, 'env.example'), 'utf8'), /^NAPCAT_IMAGE=ghcr\.io\/kadidalax\/napcatqq-clasic:1\.0\.0$/m);
   assert.throws(() => packageRelease(['--repository', 'kadidalax/NapCatQQ-Clasic', '--dist', dist, '--out', path.join(dist, 'release-assets')]), /Output must be inside|separate/);
 });
 
@@ -517,7 +515,7 @@ test('runtime JSON5 comes from the installed locked core graph with its original
   assert.ok(existsSync(path.join(destination, 'node_modules/json5/LICENSE.md')));
 });
 test('joint release rendering fixes both images while preserving independent variable overrides', () => {
-  const template = readFileSync(path.join(ROOT, 'compose/astrbot.yml'), 'utf8');
+  const template = readFileSync(path.join(ROOT, 'astrbot.yml'), 'utf8');
   const result = renderAstrbotCompose(template, 'ghcr.io/kadidalax/napcatqq-clasic:2.0.0');
   assert.ok(result.includes('${NAPCAT_IMAGE:-ghcr.io/kadidalax/napcatqq-clasic:2.0.0}'));
   assert.ok(result.includes('${ASTRBOT_IMAGE:-' + ASTRBOT_MANIFEST.image + '}'));
@@ -527,7 +525,7 @@ test('joint release rendering fixes both images while preserving independent var
 });
 test('real Compose parsing proves the base Classic contract is unchanged in the standalone joint file', t => {
   const base = composeConfiguration('compose.yaml');
-  const joint = composeConfiguration('compose/astrbot.yml');
+  const joint = composeConfiguration('astrbot.yml');
   if (!base || !joint) return t.skip('Compose CLI is not installed; native workflow smoke still validates it');
   assert.equal(base.name, 'napcatqq-clasic');
   assert.equal(joint.name, base.name);
@@ -550,12 +548,38 @@ test('real Compose parsing proves the base Classic contract is unchanged in the 
   assert.equal(Number(joint.services.astrbot.ports[0].target), 6185);
   assert.ok(!joint.services.astrbot.ports.some(port => Number(port.target) === 6199));
   assert.equal(classic.environment.ONEBOT_WS_URL, DEFAULT_ONEBOT_WS_URL);
-  assert.equal(composeConfiguration('compose/astrbot.yml', { MODE: '' }).services.napcat.environment.MODE, '');
+  assert.equal(composeConfiguration('astrbot.yml', { MODE: '' }).services.napcat.environment.MODE, '');
   assert.ok(!('MODE' in base.services.napcat.environment));
-  assert.doesNotMatch(readFileSync(path.join(ROOT, 'compose/astrbot.yml'), 'utf8'), /^\s*(extends|include):/m);
+  assert.doesNotMatch(readFileSync(path.join(ROOT, 'astrbot.yml'), 'utf8'), /^\s*(extends|include):/m);
+});
+test('root deployment templates work without an env file or exported overrides', t => {
+  const command = process.env.COMPOSE_CLI || 'docker';
+  const environment = { ...process.env, COMPOSE_DISABLE_ENV_FILE: '1' };
+  for (const key of ['NAPCAT_IMAGE', 'ASTRBOT_IMAGE', 'WEBUI_TOKEN', 'QQ_ACCOUNT', 'MODE', 'ONEBOT_WS_URL', 'ONEBOT_ACCESS_TOKEN', 'WEBUI_BIND', 'WEBUI_PORT', 'ASTRBOT_DASHBOARD_BIND', 'ASTRBOT_DASHBOARD_PORT', 'ASTRBOT_DASHBOARD_INITIAL_PASSWORD', 'COMPOSE_FILE', 'COMPOSE_PROJECT_NAME']) delete environment[key];
+  for (const file of ['compose.yaml', 'astrbot.yml']) {
+    const args = [...(process.env.COMPOSE_CLI ? [] : ['compose']), '-f', path.join(ROOT, file), 'config', '--format', 'json'];
+    const result = spawnSync(command, args, { cwd: ROOT, encoding: 'utf8', env: environment });
+    if (result.error && ['ENOENT', 'EPERM'].includes(result.error.code)) return t.skip('Compose CLI is not installed');
+    if (result.error) throw result.error;
+    assert.equal(result.status, 0, result.stderr);
+    const configuration = JSON.parse(result.stdout);
+    const project = getProject();
+    assert.equal(configuration.services.napcat.image, `ghcr.io/kadidalax/${project.slug}:${project.version}`);
+    assert.equal(configuration.services.napcat.ports[0].host_ip, '127.0.0.1');
+    if (file === 'astrbot.yml') {
+      assert.equal(configuration.services.napcat.environment.MODE, 'astrbot');
+      assert.equal(configuration.services.astrbot.image, ASTRBOT_MANIFEST.image);
+    }
+  }
+});
+test('server library chunks retain ESM extensions in commonjs loader distributions', () => {
+  for (const target of ['shell', 'framework']) {
+    const config = readFileSync(path.join(ROOT, 'packages', `napcat-${target}`, 'vite.config.ts'), 'utf8');
+    assert.match(config, /chunkFileNames:\s*['"]\[name\]-\[hash\]\.mjs['"]/);
+  }
 });
 test('the exact joint Compose Python wrapper removes only an empty initial password before stock execution', t => {
-  const joint = composeConfiguration('compose/astrbot.yml');
+  const joint = composeConfiguration('astrbot.yml');
   if (!joint) return t.skip('Compose CLI is not installed');
   const python = process.env.PYTHON_EXECUTABLE || (process.platform === 'win32' ? 'python' : 'python3');
   const source = Buffer.from(joint.services.astrbot.command[2]).toString('base64');

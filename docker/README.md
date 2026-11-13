@@ -9,21 +9,21 @@
 | 入口 | 服务 | 用途 |
 | --- | --- | --- |
 | [compose.yaml](../compose.yaml) | `napcat` | 独立 Classic；不注入 MODE，不改 OneBot 连接预设 |
-| [compose/astrbot.yml](../compose/astrbot.yml) | `napcat` + `astrbot` | 独立单文件联部署，无 extends/include，也不需要同时指定基础文件 |
+| [astrbot.yml](../astrbot.yml) | `napcat` + `astrbot` | 独立单文件联部署，无 extends/include，也不需要同时指定基础文件 |
 
 两份文件都使用 `name: napcatqq-clasic`。config、logs、plugins、cache、QQ 数据五个 named volumes 的逻辑名与挂载路径完全一致，联部署追加 `astrbot_data`。切换前应停止旧服务并省略 `-v`，避免两个 Classic 实例同时读写账号数据；不要同时启动两份文件。
 
 联部署可直接解析与启动：
 
 ```sh
-docker compose --env-file .env -f compose/astrbot.yml config -q
+docker compose -f astrbot.yml config -q
 ```
 
 ```sh
-docker compose --env-file .env -f compose/astrbot.yml up -d
+docker compose -f astrbot.yml up -d
 ```
 
-Release 附件中的同一文件叫 `astrbot.yml`，内容已经具体化两个镜像，下载时与 `.env` 放同一个目录即可。
+两份部署配置只在项目根目录维护，不放入 Release。默认镜像和端口已经写入 YAML，`.env` 文件可选；需要覆盖时使用终端环境变量或根环境样例。
 
 ## Classic 源码构建链
 
@@ -108,11 +108,11 @@ Classic 继续 UID/GID=1000:1000、只读根、cap_drop=ALL、no-new-privileges�
 1. 固定源码构建和原生依赖/layout 检查。
 2. [独立部署 smoke](../.github/scripts/smoke-docker.sh)：实际 Compose、WebUI HTTP 200、非 root/只读根、持久化重启。
 3. [联合 smoke](../.github/scripts/smoke-astrbot.sh)：固定 Astro 镜像新面板 HTTP 200；legacy global/账号 JSON5 迁移、首次备份及重启幂等；同绝对路径公开测试媒体可读、root mkstemp 0600 测试文件不可读、Classic 不可写共享媒体。
-4. Release 在以上门槛通过后才推送该测试过的本地镜像并记录 digest；同 workflow 组合精确版本 manifest、打包 Shell/Framework/OpenAPI、具体化 compose/astrbot/env 两镜像并生成全部可见附件的 SHA256SUMS。
+4. Release 在以上门槛通过后才推送该测试过的本地镜像并记录 digest；同 workflow 组合精确版本 manifest、打包 Shell/Framework/OpenAPI 及许可与构建元数据，并生成实际发行附件的 SHA256SUMS；部署文件留在项目根目录。
 
 本次 Windows 实现环境没有 Docker daemon。已运行的本地配置解析、JSON5/迁移/ZIP/密码 wrapper 单测和资源下载校验，不当成容器实际启动证据。上述云端 smoke 未使用真实 QQ 登录，不证明账号可用、聊天或媒体消息成功；这些另行人工验收。当前按用户要求只改本地源码，不执行 commit/push/创建线上 Release。
 
-GitHub Packages [公开可见性](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility)独立于仓库权限，首次发布需另设 Public 才可匿名拉取；工作流检测写 warning/summary。GitHub [Release asset API](https://docs.github.com/en/rest/releases/assets#upload-a-release-asset)会规范化前导点号，线上附件用 env.example，本地下载为 .env；源模板仍为 .env.example。
+GitHub Packages [公开可见性](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility)独立于仓库权限，首次发布需另设 Public 才可匿名拉取；工作流检测写 warning/summary。根 [`.env.example`](<../.env.example>) 只是可选覆盖模板，部署时可复制为 `.env`；配置文件不作为线上 Release 附件。
 
 ## 许可范围
 

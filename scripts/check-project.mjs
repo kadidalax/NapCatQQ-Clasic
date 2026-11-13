@@ -28,7 +28,7 @@ assert.ok(!(await text('.gitignore')).split(/\r?\n/).includes('pnpm-lock.yaml'),
 
 const required = [
   'LICENSE', 'THIRD_PARTY_NOTICES.md', 'README.md', 'SECURITY.md',
-  'pnpm-lock.yaml', 'Dockerfile', '.dockerignore', 'compose.yaml', 'compose/astrbot.yml', '.env.example',
+  'pnpm-lock.yaml', 'Dockerfile', '.dockerignore', 'compose.yaml', 'astrbot.yml', '.env.example',
   '.github/workflows/ci.yml', '.github/workflows/release.yml',
   'scripts/build-artifacts.mjs', 'scripts/package-release.mjs',
   'licenses/qrcode-terminal.LICENSE', 'licenses/qrcode-generator.LICENSE', 'licenses/node-pty.LICENSE',
@@ -62,7 +62,7 @@ for (const file of ['README.md', 'THIRD_PARTY_NOTICES.md', 'CODE_OF_CONDUCT.md',
 }
 const readme = await text('README.md');
 assert.match(readme, /^# NapCatQQ-clasic\b/m);
-for (const item of ['compose/astrbot.yml', 'MODE', 'ONEBOT', 'Docker', '迁移', '验收']) {
+for (const item of ['astrbot.yml', 'MODE', 'ONEBOT', 'Docker', '迁移', '验收']) {
   assert.ok(readme.includes(item), `README is missing deployment contract: ${item}`);
 }
 console.log(`Project checks passed: ${project.name} ${project.version}; original licenses preserved; updates disabled; standalone and AstrBot deployment contracts present.`);

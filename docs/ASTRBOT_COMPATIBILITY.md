@@ -1,7 +1,7 @@
 <!-- License: see repository LICENSE; external components retain their original licenses. -->
 # AstrBot 联部署兼容性基线
 
-本文件记录联部署模板选型的实取元数据和固定版本源码契约。模板：[compose/astrbot.yml](<../compose/astrbot.yml>)；运行配置：[环境样例](<../.env.example>)。
+本文件记录联部署模板选型的实取元数据和固定版本源码契约。模板：[astrbot.yml](<../astrbot.yml>)；运行配置：[环境样例](<../.env.example>)。
 
 ## 1. 镜像与来源
 

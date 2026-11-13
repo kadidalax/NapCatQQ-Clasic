@@ -110,6 +110,7 @@ export function renderEnvironment (template, image, astrbotImage = ASTRBOT_MANIF
 
 export function releaseNotes (project, version, repository, image) {
   const url = `https://github.com/${repository}/releases/download/v${version}`;
+  const source = `https://raw.githubusercontent.com/${repository}/main`;
   return [
     `# ${project.name} v${version}`,
     '',
@@ -117,14 +118,12 @@ export function releaseNotes (project, version, repository, image) {
     '',
     '## Linux Docker 部署（已安装 Docker Engine 与 Compose 插件）',
     '',
-    '逐条复制以下命令；Release 配置已写入本仓库镜像和精确版本。',
+    '部署模板位于仓库根目录，不作为 Release 附件；模板自带固定镜像默认值，.env 文件可选。',
     '',
     ...[
       'mkdir -p ~/napcatqq-clasic',
       'cd ~/napcatqq-clasic',
-      `wget -O compose.yaml "${url}/compose.yaml"`,
-      `wget -O .env "${url}/env.example"`,
-      'chmod 600 .env',
+      `wget -O compose.yaml "${source}/compose.yaml"`,
       'docker compose config -q',
       'docker compose up -d',
       'docker compose ps',
@@ -138,7 +137,7 @@ export function releaseNotes (project, version, repository, image) {
     '```',
     '',
     '再访问 http://127.0.0.1:6099/webui/，使用上面查询出的 token，并扫码登录 QQ。',
-    '`WEBUI_TOKEN` 留空会生成随机 token 并保存在 config 卷；再次启动保留它。',
+    '`WEBUI_TOKEN` 留空会生成随机 token 并保存在 config 卷；再次启动保留它。.env 文件不是启动条件，需要覆盖默认值时才使用根目录 .env.example。',
     '`QQ_ACCOUNT` 只用于已有登录记录的快速登录，首次仍需扫码。',
     '',
     '## AstrBot 单文件联部署（可选）',
@@ -147,7 +146,7 @@ export function releaseNotes (project, version, repository, image) {
     '',
     ...[
       'docker compose down',
-      `wget -O astrbot.yml "${url}/astrbot.yml"`,
+      `wget -O astrbot.yml "${source}/astrbot.yml"`,
       'docker compose -f astrbot.yml config -q',
       'docker compose -f astrbot.yml up -d',
       'docker compose -f astrbot.yml ps',
@@ -164,7 +163,7 @@ export function releaseNotes (project, version, repository, image) {
     '',
     '- `NapCatQQ-clasic.Shell.zip`：源码构建的 Shell、仓库 Windows loaders、WebUI、运行依赖和完整许可。未捆绑 Windows QQ / Node；Windows 使用仓库 loader 时需先安装相应 QQ。',
     '- `NapCatQQ-clasic.Framework.zip`：Framework、WebUI、运行依赖和完整许可；需已有 QQ / 对应 Framework 加载环境。',
-    '- `openapi.json`、独立 `compose.yaml`、单文件联部署 `astrbot.yml`、两个固定镜像的 `env.example`、`SHA256SUMS`、`build-info.json`、`image-manifest.json`。',
+    '- `openapi.json`、`SHA256SUMS`、`build-info.json`、`image-manifest.json`；部署配置只在仓库根目录维护。',
     `- AstrBot 独立镜像：\`${ASTRBOT_MANIFEST.image}\`，默认 root / Python ${ASTRBOT_MANIFEST.pythonVersion}；未将其或依赖重新许可为本项目许可。`,
     `- Docker 镜像：\`${image}\`，支持 linux/amd64、linux/arm64；两架构均须通过本次工作流的启动测试后才发布。`,
     '',
@@ -216,12 +215,8 @@ export function packageRelease (args = process.argv.slice(2)) {
   }
   copyFileSync(path.join(dist, 'openapi.json'), path.join(output, 'openapi.json'));
   copyFileSync(path.join(dist, 'build-info.json'), path.join(output, 'build-info.json'));
-  writeFileSync(path.join(output, 'compose.yaml'), renderCompose(readFileSync(path.join(ROOT, 'compose.yaml'), 'utf8'), image));
-  writeFileSync(path.join(output, 'astrbot.yml'), renderAstrbotCompose(readFileSync(path.join(ROOT, 'compose', 'astrbot.yml'), 'utf8'), image));
-  const env = renderEnvironment(readFileSync(path.join(ROOT, '.env.example'), 'utf8'), image);
-  // GitHub normalizes leading periods in release asset names. Publish one
-  // unambiguous env.example asset; users download it as .env locally.
-  writeFileSync(path.join(output, 'env.example'), env);
+  // Deployment templates and the optional .env.example belong to the repository
+  // root, not to Release assets. Runtime ZIPs and checksums are packaged here.
   const notes = releaseNotes(project, version, repository, image);
   writeFileSync(path.join(output, 'DEPLOYMENT.md'), notes);
   writeFileSync(path.join(output, 'RELEASE.md'), notes);

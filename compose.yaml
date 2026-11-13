@@ -3,7 +3,7 @@
 name: napcatqq-clasic
 services:
   napcat:
-    image: "${NAPCAT_IMAGE:?Set NAPCAT_IMAGE in .env to your pinned GHCR image}"
+    image: "${NAPCAT_IMAGE:-ghcr.io/kadidalax/napcatqq-clasic:4.18.42}"
     restart: unless-stopped
     hostname: napcatqq-clasic
     user: "1000:1000"

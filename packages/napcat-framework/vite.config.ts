@@ -63,6 +63,7 @@ const FrameworkBaseConfig = () =>
         fileName: (_, entryName) => `${entryName}.mjs`,
       },
       rollupOptions: {
+        output: { chunkFileNames: '[name]-[hash].mjs' },
         external: [...nodeModules, ...external],
       },
     },

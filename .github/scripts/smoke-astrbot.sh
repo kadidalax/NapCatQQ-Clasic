@@ -14,7 +14,7 @@ export MODE=astrbot ONEBOT_WS_URL=ws://astrbot:6199/ws
 export ONEBOT_ACCESS_TOKEN="clasic-joint-smoke-${GITHUB_RUN_ID:-local}-protocol-token"
 export ASTRBOT_DASHBOARD_INITIAL_PASSWORD="ClasicCiInitialPassword123-${GITHUB_RUN_ID:-local}"
 export WEBUI_BIND=127.0.0.1 WEBUI_PORT=0 ASTRBOT_DASHBOARD_BIND=127.0.0.1 ASTRBOT_DASHBOARD_PORT=0 QQ_ACCOUNT=
-compose=(docker compose -p "$project" -f compose/astrbot.yml)
+compose=(docker compose -p "$project" -f astrbot.yml)
 cleanup() {
   result=$?
   if [ "$result" -ne 0 ]; then "${compose[@]}" logs --no-color || true; fi
