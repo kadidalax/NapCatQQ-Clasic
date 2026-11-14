@@ -4,6 +4,7 @@ name: napcatqq-clasic
 services:
   napcat:
     image: "${NAPCAT_IMAGE:-ghcr.io/kadidalax/napcatqq-clasic:4.18.42}"
+    container_name: napcat
     restart: unless-stopped
     hostname: napcatqq-clasic
     user: "1000:1000"
@@ -17,7 +18,7 @@ services:
       WEBUI_TOKEN: "${WEBUI_TOKEN:-}"
       NAPCAT_QUICK_ACCOUNT: "${QQ_ACCOUNT:-}"
     ports:
-      - "${WEBUI_BIND:-127.0.0.1}:${WEBUI_PORT:-6099}:6099"
+      - "${WEBUI_BIND:-}:${WEBUI_PORT:-6099}:6099"
       # Add only the OneBot port you enable in WebUI, for example:
       # - "127.0.0.1:3000:3000"
     volumes:

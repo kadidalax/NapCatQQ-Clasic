@@ -22,9 +22,10 @@ NapCatQQ-clasic ── OneBot 11 reverse WebSocket ──► AstrBot
 | Classic 容器 | Debian bookworm、固定 Node 多架构镜像摘要、普通用户 `1000:1000` |
 | QQ 运行环境 | Linux QQ `3.2.34-53644`，使用 QQ 自身 Electron / 原生 ABI |
 | 容器平台 | `linux/amd64`、`linux/arm64` |
+| 容器名 | 沿用原模板：Classic 为 `napcat`，AstrBot 为 `astrbot` |
 | AstrBot 基线 | `soulter/astrbot:v4.29.4`，固定多架构 manifest 摘要 |
 | 协议连接 | OneBot 11 反向 WebSocket；默认 `ws://astrbot:6199/ws` |
-| 管理端口 | Classic `6099`、AstrBot `6185`；默认仅绑定宿主 `127.0.0.1` |
+| 管理端口 | Classic `6099`、AstrBot `6185`；沿用原始端口发布，不指定宿主 IP，遵循 Docker 默认绑定 |
 
 Docker 从本仓库源码生成 Shell / WebUI / 插件，不下载上游 Shell Release，也不继承旧 NapCat 镜像。QQ AppImage 的完整 SHA256 与字节数记录在 [下载清单](<./docker/qq-manifest.json>)；[Dockerfile](<./Dockerfile>) 固定基础镜像摘要并校验 QQ 版本、架构、原生依赖和加载器布局。
 
@@ -91,7 +92,7 @@ docker compose -f astrbot.yml config -q && docker compose -f astrbot.yml up -d
 3. 核对 Classic 中的反向 WebSocket 已启用，目标为 `ws://astrbot:6199/ws`，消息格式为 `array`；日志应显示协议连接成功。
 4. 用实际账号分别验收文本、图片、文件和视频。端口 `6199` 只用于容器内部网络，不要求映射到宿主。
 
-AstrBot `v4.29.4` 初始平台列表为空，容器启动不会自动创建接收平台。首次管理密码由 AstrBot 随机生成，在日志中以 `Initial password` 提示，首次登录后更改。若指定 `ASTRBOT_DASHBOARD_INITIAL_PASSWORD`，应为非空且满足该版本的长度 / 大小写 / 数字要求；不要向容器注入空字符串，也不要持续启用密码重置选项。
+AstrBot `v4.29.4` 初始平台列表为空，容器启动不会自动创建接收平台。首次生成或主动重置管理密码时，启动日志才会输出 `Initial password`；已有密码的普通重启不重复显示。查看日志与一次性重置命令见 [管理凭据查看与重置](<#31-管理凭据查看与重置>)。若指定 `ASTRBOT_DASHBOARD_INITIAL_PASSWORD`，应为非空且满足该版本的长度 / 大小写 / 数字要求；不要向应用直接注入空字符串，也不要持续启用密码重置选项。
 
 ## 3. 配置管理
 
@@ -103,9 +104,9 @@ AstrBot `v4.29.4` 初始平台列表为空，容器启动不会自动创建接�
 | `NAPCAT_IMAGE` | 可选覆盖；默认 `ghcr.io/kadidalax/napcatqq-clasic:4.18.42` |
 | `ASTRBOT_IMAGE` | 联部署使用的固定 AstrBot 镜像，可显式覆盖 |
 | `WEBUI_TOKEN` | Classic 管理 token；空值时首次随机生成，已有配置继续沿用 |
-| `WEBUI_BIND` / `WEBUI_PORT` | Classic 宿主绑定 / 端口；容器内固定为 `0.0.0.0:6099` |
+| `WEBUI_BIND` / `WEBUI_PORT` | Classic 宿主绑定 / 端口；绑定默认空，沿用原始 `6099:6099` 发布；非空才显式覆盖；容器内固定为 `0.0.0.0:6099` |
 | `QQ_ACCOUNT` | 可选已有 QQ 登录记录；首次仍需扫码 |
-| `ASTRBOT_DASHBOARD_BIND` / `ASTRBOT_DASHBOARD_PORT` | AstrBot 宿主管理界面绑定 / 端口，默认 `127.0.0.1:6185` |
+| `ASTRBOT_DASHBOARD_BIND` / `ASTRBOT_DASHBOARD_PORT` | AstrBot 宿主绑定 / 端口；绑定默认空，沿用原始 `6185:6185` 发布；非空才显式覆盖 |
 | `ASTRBOT_DASHBOARD_INITIAL_PASSWORD` | 可选 AstrBot 首次管理密码；空值在启动包装器中省略，由应用随机生成 |
 | `MODE` | `astrbot` 启用联部署预设，空值不管理 OneBot 预设 |
 | `ONEBOT_WS_URL` | 反向 WebSocket 地址，默认 `ws://astrbot:6199/ws` |
@@ -121,13 +122,67 @@ AstrBot `v4.29.4` 初始平台列表为空，容器启动不会自动创建接�
 docker compose -f astrbot.yml up -d
 ```
 
+### 3.1 管理凭据查看与重置
+
+#### Classic WebUI token
+
 查询 Classic 实际 token：
 
 ```bash
 docker compose -f astrbot.yml exec napcat node -p "require('/app/napcat/config/webui.json').token"
 ```
 
-远程管理可用单个 SSH 隧道转发两个本机管理端口：
+#### AstrBot 初始密码与完整启动日志
+
+默认用户名为 `astrbot`。只有本次启动生成或主动重置管理密码时，AstrBot 才会在 `INFO` 级别的启动日志中输出 `Initial password`；已有密码的普通重启、复用数据卷不会再次打印旧密码。容器重建后，旧容器的启动日志不在新容器日志中，但数据卷中的密码继续保留。
+
+查看完整 AstrBot 日志，不要只截取最后 100 / 200 行：
+
+```bash
+docker compose -f astrbot.yml logs --no-color astrbot
+```
+
+使用固定容器名也可直接查看：
+
+```bash
+docker logs astrbot
+```
+
+`ASTRBOT_DASHBOARD_INITIAL_PASSWORD` 留空时，模板包装器会省略该环境变量，由应用生成随机 24 字符密码。非空时应至少 8 字符，包含大写、小写字母和数字；它仅在生成或重置密码时作为初始值使用，单独修改该变量不会覆盖已有密码。
+
+#### AstrBot 一次性重置密码
+
+以下操作会重置管理密码，不是查询旧密码；平台、插件及其他持久化数据保留。操作期间 AstrBot 暂停服务。
+
+1. 停止正式 AstrBot 容器：
+
+```bash
+docker compose -f astrbot.yml stop astrbot
+```
+
+2. 沿用模板原启动命令，启动一次性容器并临时传入原版重置标记：
+
+```bash
+docker compose -f astrbot.yml run --rm --no-deps -e ASTRBOT_RESET_DASHBOARD_PASSWORD=1 astrbot
+```
+
+未设置非空 `ASTRBOT_DASHBOARD_INITIAL_PASSWORD` 时会生成新的随机密码；已设置时使用该值。等待控制台输出 `Initial password`，记下新密码，然后按 **Ctrl+C** 结束临时运行。
+
+3. 恢复正式 AstrBot 服务，使用新密码登录：
+
+```bash
+docker compose -f astrbot.yml up -d astrbot
+```
+
+重置标记只传给一次性容器，不加入常规模板或 `.env`，避免每次启动重复重置。全程保留数据卷，无需重新安装。命令依据：[AstrBot v4.29.4 原版启动参数](https://github.com/AstrBotDevs/AstrBot/blob/v4.29.4/main.py)、[密码初始化逻辑](https://github.com/AstrBotDevs/AstrBot/blob/v4.29.4/astrbot/core/config/astrbot_config.py)。
+
+### 3.2 宿主机访问
+
+管理端口沿用原始 `6099:6099` / `6185:6185` 发布行为，默认不指定宿主 IP。Docker 默认配置可提供 IPv4 / IPv6 入口，实际 IPv6 访问取决于宿主 IPv6 与 Docker 转发配置；这不等同于启用容器原生 IPv6 网络。通过 `http://<SERVER_IP>:6099/webui/` 和 `http://<SERVER_IP>:6185` 访问，IPv6 地址用方括号包裹；服务器防火墙 / 云安全组需允许对应端口。
+
+已有 `.env` 或终端环境中的非空 `WEBUI_BIND` / `ASTRBOT_DASHBOARD_BIND` 仍会显式覆盖默认绑定。恢复原始默认时将这两项清空或删除，再执行 `docker compose -f astrbot.yml up -d` 更新端口映射，单独 `restart` 不会应用变更。
+
+若希望仅本机监听，可将 `WEBUI_BIND` 和 `ASTRBOT_DASHBOARD_BIND` 显式设为 `127.0.0.1`，重新执行 `up -d` 后使用单个 SSH 隧道转发两个管理端口：
 
 ```bash
 ssh -N -L 6099:127.0.0.1:6099 -L 6185:127.0.0.1:6185 USER@HOST

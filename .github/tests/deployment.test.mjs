@@ -169,16 +169,18 @@ test('ZIP input symlinks are an explicit error', () => {
   assert.throws(() => createZip(path.join(root, 'source'), path.join(root, 'out.zip')), /symlink/);
 });
 
-test('Compose release assets concrete the owner/version but keep image override and localhost defaults', () => {
+test('Compose release assets concrete the owner/version but keep image override and original Docker defaults', () => {
   const template = readFileSync(path.join(ROOT, 'compose.yaml'), 'utf8');
   const result = renderCompose(template, 'ghcr.io/kadidalax/napcatqq-clasic:1.0.0');
   assert.ok(result.includes('${NAPCAT_IMAGE:-ghcr.io/kadidalax/napcatqq-clasic:1.0.0}'));
-  assert.ok(result.includes('${WEBUI_BIND:-127.0.0.1}'));
+  assert.ok(result.includes('${WEBUI_BIND:-}'));
   assert.ok(result.includes('user: "1000:1000"'));
   assert.ok(result.includes('read_only: true'));
   assert.throws(() => renderCompose(template, 'ghcr.io/kadidalax/napcatqq-clasic:latest'));
   const env = renderEnvironment(readFileSync(path.join(ROOT, '.env.example'), 'utf8'), 'ghcr.io/kadidalax/napcatqq-clasic:1.0.0');
   assert.match(env, /^NAPCAT_IMAGE=ghcr\.io\/kadidalax\/napcatqq-clasic:1\.0\.0$/m);
+  assert.match(env, /^WEBUI_BIND=$/m);
+  assert.match(env, /^ASTRBOT_DASHBOARD_BIND=$/m);
 });
 test('release deployment commands are one command per block and use the real asset name', () => {
   const notes = releaseNotes({ name: 'NapCatQQ-clasic', maintainer: 'kadidalax' }, '1.0.0', 'kadidalax/NapCatQQ-Clasic', 'ghcr.io/kadidalax/napcatqq-clasic:1.0.0');
@@ -189,7 +191,13 @@ test('release deployment commands are one command per block and use the real ass
   assert.ok(!notes.includes('/releases/download/v1.0.0/compose.yaml'));
   assert.ok(!notes.includes('/releases/download/v1.0.0/astrbot.yml'));
   assert.ok(notes.includes('docker compose config -q'));
-  assert.ok(notes.includes('http://127.0.0.1:6099/webui/'));
+  assert.ok(notes.includes('http://[SERVER_IP]:6099/webui/'));
+  assert.ok(notes.includes('http://[SERVER_IP]:6185'));
+  assert.ok(notes.includes('原始 6099:6099 发布行为'));
+  assert.ok(notes.includes('原始 6185:6185 发布行为'));
+  assert.ok(notes.includes('默认不指定宿主 IP'));
+  assert.ok(notes.includes('http://127.0.0.1:6099/webui/'), 'Explicit localhost override retains the optional SSH access instructions');
+  assert.ok(!notes.includes('默认只在宿主 127.0.0.1'));
 });
 
 test('first container startup generates a strong persisted token and seeds the writable volumes', async () => {
@@ -522,6 +530,8 @@ test('joint release rendering fixes both images while preserving independent var
   const result = renderAstrbotCompose(template, 'ghcr.io/kadidalax/napcatqq-clasic:2.0.0');
   assert.ok(result.includes('${NAPCAT_IMAGE:-ghcr.io/kadidalax/napcatqq-clasic:2.0.0}'));
   assert.ok(result.includes('${ASTRBOT_IMAGE:-' + ASTRBOT_MANIFEST.image + '}'));
+  assert.ok(result.includes('${WEBUI_BIND:-}'));
+  assert.ok(result.includes('${ASTRBOT_DASHBOARD_BIND:-}'));
   assert.throws(() => renderAstrbotCompose(template, 'ghcr.io/kadidalax/napcatqq-clasic:1.0.0', 'soulter/astrbot:latest'));
   assert.equal(ASTRBOT_MEDIA_PATH, '/AstrBot/data');
   assert.deepEqual(ASTRBOT_MANIFEST.platforms, ['linux/amd64', 'linux/arm64']);
@@ -533,7 +543,10 @@ test('real Compose parsing proves the base Classic contract is unchanged in the 
   assert.equal(base.name, 'napcatqq-clasic');
   assert.equal(joint.name, base.name);
   const classic = joint.services.napcat;
-  for (const field of ['image', 'user', 'hostname', 'read_only', 'cap_drop', 'security_opt', 'shm_size', 'tmpfs', 'ports', 'stop_grace_period', 'logging']) assert.deepEqual(classic[field], base.services.napcat[field], field);
+  assert.equal(base.services.napcat.container_name, 'napcat');
+  assert.equal(joint.services.astrbot.container_name, 'astrbot');
+  assert.equal(base.services.napcat.ports[0].host_ip, undefined);
+  for (const field of ['image', 'container_name', 'user', 'hostname', 'read_only', 'cap_drop', 'security_opt', 'shm_size', 'tmpfs', 'ports', 'stop_grace_period', 'logging']) assert.deepEqual(classic[field], base.services.napcat[field], field);
   for (const volume of base.services.napcat.volumes) assert.deepEqual(classic.volumes.find(item => item.target === volume.target), volume);
   for (const name of Object.keys(base.volumes)) assert.equal(joint.volumes[name].name, base.volumes[name].name);
   const sharedClassic = classic.volumes.find(item => item.target === ASTRBOT_MEDIA_PATH);
@@ -547,7 +560,7 @@ test('real Compose parsing proves the base Classic contract is unchanged in the 
   assert.equal(joint.services.astrbot.working_dir, '/AstrBot');
   assert.equal(joint.services.astrbot.environment.DASHBOARD_HOST, '0.0.0.0');
   assert.equal(joint.services.astrbot.environment.DASHBOARD_PORT, '6185');
-  assert.equal(joint.services.astrbot.ports[0].host_ip, '127.0.0.1');
+  assert.equal(joint.services.astrbot.ports[0].host_ip, undefined);
   assert.equal(Number(joint.services.astrbot.ports[0].target), 6185);
   assert.ok(!joint.services.astrbot.ports.some(port => Number(port.target) === 6199));
   assert.equal(classic.environment.ONEBOT_WS_URL, DEFAULT_ONEBOT_WS_URL);
@@ -568,10 +581,49 @@ test('root deployment templates work without an env file or exported overrides',
     const configuration = JSON.parse(result.stdout);
     const project = getProject();
     assert.equal(configuration.services.napcat.image, `ghcr.io/kadidalax/${project.slug}:${project.version}`);
-    assert.equal(configuration.services.napcat.ports[0].host_ip, '127.0.0.1');
+    assert.equal(configuration.services.napcat.container_name, 'napcat');
+    assert.equal(configuration.services.napcat.ports[0].host_ip, undefined);
     if (file === 'astrbot.yml') {
       assert.equal(configuration.services.napcat.environment.MODE, 'astrbot');
       assert.equal(configuration.services.astrbot.image, ASTRBOT_MANIFEST.image);
+      assert.equal(configuration.services.astrbot.container_name, 'astrbot');
+      assert.equal(configuration.services.astrbot.ports[0].host_ip, undefined);
+    }
+  }
+});
+test('explicit panel bind and port overrides remain independent in both deployment templates', t => {
+  const overrides = { WEBUI_BIND: '127.0.0.1', WEBUI_PORT: '16099', ASTRBOT_DASHBOARD_BIND: '192.0.2.10', ASTRBOT_DASHBOARD_PORT: '16185' };
+  for (const file of ['compose.yaml', 'astrbot.yml']) {
+    const configuration = composeConfiguration(file, overrides);
+    if (!configuration) return t.skip('Compose CLI is not installed');
+    const classic = configuration.services.napcat.ports[0];
+    assert.equal(classic.host_ip, overrides.WEBUI_BIND);
+    assert.equal(Number(classic.published), Number(overrides.WEBUI_PORT));
+    assert.equal(Number(classic.target), 6099);
+    if (file === 'astrbot.yml') {
+      const dashboard = configuration.services.astrbot.ports[0];
+      assert.equal(dashboard.host_ip, overrides.ASTRBOT_DASHBOARD_BIND);
+      assert.equal(Number(dashboard.published), Number(overrides.ASTRBOT_DASHBOARD_PORT));
+      assert.equal(Number(dashboard.target), 6185);
+      assert.equal(configuration.services.astrbot.environment.DASHBOARD_HOST, '0.0.0.0');
+      assert.ok(!configuration.services.astrbot.ports.some(port => Number(port.target) === 6199));
+    }
+  }
+});
+test('empty panel bind and port overrides fall back to original Docker deployment defaults', t => {
+  const overrides = { WEBUI_BIND: '', WEBUI_PORT: '', ASTRBOT_DASHBOARD_BIND: '', ASTRBOT_DASHBOARD_PORT: '' };
+  for (const file of ['compose.yaml', 'astrbot.yml']) {
+    const configuration = composeConfiguration(file, overrides);
+    if (!configuration) return t.skip('Compose CLI is not installed');
+    const classic = configuration.services.napcat.ports[0];
+    assert.equal(classic.host_ip, undefined);
+    assert.equal(Number(classic.published), 6099);
+    assert.equal(Number(classic.target), 6099);
+    if (file === 'astrbot.yml') {
+      const dashboard = configuration.services.astrbot.ports[0];
+      assert.equal(dashboard.host_ip, undefined);
+      assert.equal(Number(dashboard.published), 6185);
+      assert.equal(Number(dashboard.target), 6185);
     }
   }
 });

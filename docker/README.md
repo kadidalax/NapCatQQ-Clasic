@@ -23,7 +23,7 @@ docker compose -f astrbot.yml config -q
 docker compose -f astrbot.yml up -d
 ```
 
-两份部署配置只在项目根目录维护，不放入 Release。默认镜像和端口已经写入 YAML，`.env` 文件可选；需要覆盖时使用终端环境变量或根环境样例。
+两份部署配置只在项目根目录维护，不放入 Release。默认镜像和端口已经写入 YAML，`.env` 文件可选；需要覆盖时使用终端环境变量或根环境样例。管理端口沿用原始 `6099:6099` / `6185:6185` 发布行为，默认不指定宿主 IP，遵循 Docker 默认绑定。`WEBUI_BIND` / `ASTRBOT_DASHBOARD_BIND` 仅在非空时显式覆盖；已有部署恢复原始默认时将这两项留空，执行 `up -d` 更新端口映射。
 
 ## Classic 源码构建链
 
@@ -56,7 +56,7 @@ soulter/astrbot:v4.29.4@sha256:72f341f0ffcf6621ef820277642c5d63955f7beeac3683433
 
 该 index 包含 linux/amd64、linux/arm64 两个运行平台；unknown/unknown 条目是 attestations，不是第三个运行架构。镜像默认 root、Python 3.12.16、WorkingDir=/AstrBot、Cmd=python main.py。联部署保留 root 和可写应用文件系统，避免系统 Python 插件安装被错误的 UID 1000 或只读根阻断。
 
-- 宿主面板默认 `127.0.0.1:6185`。容器内 `DASHBOARD_HOST=0.0.0.0` / `DASHBOARD_PORT=6185` 是该版本真实支持的变量，优先于配置文件。
+- 宿主面板默认沿用原始 `6185:6185` 发布，不指定宿主 IP；通过 `http://<SERVER_IP>:6185` 访问，IPv6 地址用方括号包裹。容器内 `DASHBOARD_HOST=0.0.0.0` / `DASHBOARD_PORT=6185` 是该版本真实支持的变量，优先于配置文件。
 - [环境样例](../.env.example) 的初始密码可以留空。单文件 Compose 内联 Python wrapper 在 exec 原 main.py 前，仅移除空字符串 `ASTRBOT_DASHBOARD_INITIAL_PASSWORD`，因为应用对显式空值会校验失败。非空值交给原生校验（至少八位、含大写/小写/数字）。不永久设置 reset-password。
 - 第一次 username 为 astrbot；未设非空初始密码时程序生成随机 24 字符密码，启动日志含 Initial password，并要求改密。不是 astrbot/astrbot。
 - 新数据的 platform=[]。操作者仍须在 WebUI 新建启用的 aiocqhttp / OneBot v11 平台：ws_reverse_host=0.0.0.0、ws_reverse_port=6199、ws_reverse_token=双方相同的协议 token；服务器路径为 /ws。6199 只在同网可见，不映射宿主。

@@ -5,6 +5,7 @@ name: napcatqq-clasic
 services:
   napcat:
     image: "${NAPCAT_IMAGE:-ghcr.io/kadidalax/napcatqq-clasic:4.18.42}"
+    container_name: napcat
     restart: unless-stopped
     hostname: napcatqq-clasic
     user: "1000:1000"
@@ -22,7 +23,7 @@ services:
       ONEBOT_WS_URL: "${ONEBOT_WS_URL:-ws://astrbot:6199/ws}"
       ONEBOT_ACCESS_TOKEN: "${ONEBOT_ACCESS_TOKEN:-}"
     ports:
-      - "${WEBUI_BIND:-127.0.0.1}:${WEBUI_PORT:-6099}:6099"
+      - "${WEBUI_BIND:-}:${WEBUI_PORT:-6099}:6099"
     volumes:
       - napcat_config:/app/napcat/config
       - napcat_logs:/app/napcat/logs
@@ -46,6 +47,7 @@ services:
         max-file: "3"
   astrbot:
     image: "${ASTRBOT_IMAGE:-soulter/astrbot:v4.29.4@sha256:72f341f0ffcf6621ef820277642c5d63955f7beeac3683433ce09cac96379c78}"
+    container_name: astrbot
     restart: unless-stopped
     working_dir: /AstrBot
     # Keep the verified image's root user and writable application filesystem;
@@ -65,7 +67,7 @@ services:
             os.environ.pop("ASTRBOT_DASHBOARD_INITIAL_PASSWORD", None)
         os.execvp("python", ["python", "main.py"])
     ports:
-      - "${ASTRBOT_DASHBOARD_BIND:-127.0.0.1}:${ASTRBOT_DASHBOARD_PORT:-6185}:6185"
+      - "${ASTRBOT_DASHBOARD_BIND:-}:${ASTRBOT_DASHBOARD_PORT:-6185}:6185"
     expose:
       - "6199"
     volumes:

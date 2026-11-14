@@ -22,7 +22,7 @@ export async function initialiseConfig ({ environment = process.env, workDirecto
   const token = overrideToken || (validExisting ? current.token : randomBytes(24).toString('hex'));
   const account = environment.NAPCAT_QUICK_ACCOUNT || '';
   if (account && !/^[1-9][0-9]{4,19}$/.test(account)) throw new Error('QQ_ACCOUNT must be a numeric QQ account');
-  // Bind inside the container on IPv4. Compose publishes it on localhost only.
+  // Bind inside the container on IPv4. Compose keeps Docker's default host bindings.
   const config = { ...current, host: '0.0.0.0', port: 6099, token, disableWebUI: false, ...(account ? { autoLoginAccount: account } : {}) };
   await initialiseOneBotPreset({ environment, configDirectory: path.join(workDirectory, 'config'), shellDirectory, json5 });
   const temporary = `${file}.${process.pid}.tmp`;
